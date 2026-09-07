@@ -307,23 +307,6 @@ footer {
 @media (max-width: 768px) {
     .hero h1 { font-size: 2.5rem; }
     .nav-links { display: none; }
-    
-    .chat-window {
-        position: fixed;
-        width: 90vw !important;
-        height: min(60vh, 520px) !important;
-        bottom: 80px !important;
-        right: 50% !important;
-        transform: none !important;
-        max-height: calc(100dvh - 96px - env(safe-area-inset-bottom)) !important;
-    }
-    
-    .chatbot-container {
-
-        position: fixed;
-        bottom: 20px !important;
-        right: 20px !important;
-    }
 }
 
 /* Floating Chatbot Styles */
@@ -461,4 +444,32 @@ footer {
 
 .chat-input-area button:hover {
     background: var(--secondary-color);
+}
+
+@media (max-width: 768px) {
+    .chatbot-container {
+        right: 12px;
+        bottom: calc(12px + env(safe-area-inset-bottom));
+    }
+
+    .chat-window {
+        position: fixed;
+        left: 8px;
+        right: 8px;
+        bottom: calc(78px + env(safe-area-inset-bottom));
+        width: auto;
+        height: min(60dvh, 520px);
+        max-height: calc(100dvh - 96px - env(safe-area-inset-bottom));
+        transform: none;
+    }
+
+    .chat-messages {
+        min-height: 0;
+        overflow-y: auto;
+    }
+
+    .chat-input-area input {
+        min-width: 0;
+        font-size: 16px;
+    }
 }
