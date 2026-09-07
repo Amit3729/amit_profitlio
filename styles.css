@@ -314,7 +314,8 @@ footer {
     position: fixed;
     bottom: calc(20px + env(safe-area-inset-bottom));
     right: 12px;
-    z-index: 1000;
+    /* Keep the chat controls above the fixed navigation bar. */
+    z-index: 1100;
 }
 
 .chat-toggle {
@@ -365,6 +366,10 @@ footer {
 .chat-header h3 {
     font-size: 1.1rem;
     font-weight: 600;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .close-chat {
@@ -373,6 +378,7 @@ footer {
     color: white;
     font-size: 24px;
     cursor: pointer;
+    flex-shrink: 0;
 }
 
 .chat-messages {
@@ -448,15 +454,15 @@ footer {
 
 @media (max-width: 768px) {
     .chatbot-container {
-        right: 12px;
-        bottom: calc(12px + env(safe-area-inset-bottom));
+        right: calc(12px + env(safe-area-inset-right, 0px));
+        bottom: calc(12px + env(safe-area-inset-bottom, 0px));
     }
 
     .chat-window {
         position: fixed;
-        left: 8px;
-        right: 8px;
-        bottom: calc(78px + env(safe-area-inset-bottom));
+        left: calc(12px + env(safe-area-inset-left, 0px));
+        right: calc(12px + env(safe-area-inset-right, 0px));
+        bottom: calc(78px + env(safe-area-inset-bottom, 0px));
         width: auto;
         height: min(60dvh, 520px);
         max-height: calc(100dvh - 96px - env(safe-area-inset-bottom));
