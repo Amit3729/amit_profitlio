@@ -310,7 +310,7 @@ footer {
     
     .chat-window {
         width: 90vw !important;
-        height: 60vh !important;
+        height: min(60vh, 520px) !important;
         bottom: 80px !important;
         right: 50% !important;
         transform: translateX(50%);
