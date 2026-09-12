@@ -2,7 +2,9 @@
 const SESSION_ID = (() => {
     let id = localStorage.getItem('chat_session_id');
     if (!id) {
-        id = crypto.randomUUID();
+        id = (window.crypto && crypto.randomUUID)
+            ? crypto.randomUUID()
+            : 'sid-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
         localStorage.setItem('chat_session_id', id);
     }
     return id;
@@ -45,7 +47,13 @@ async function sendMessage() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ text: message, session_id: SESSION_ID })
         });
-        
+
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            console.error('API rejected the request:', response.status, err);
+            throw new Error('Server returned ' + response.status);
+        }
+
         const data = await response.json();
         
         // Remove typing status and add bot response

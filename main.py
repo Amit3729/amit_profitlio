@@ -1,8 +1,10 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from pydantic  import BaseModel, Field
 from collections import deque, defaultdict
-from typing import List, Dict, Any, Deque
-from fastapi.responses import FileResponse
+from typing import List, Dict, Any, Deque, Optional
+import uuid
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import os
 from dotenv import load_dotenv
@@ -28,6 +30,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Log the body behind every 422 instead of silently returning one.
+@app.exception_handler(RequestValidationError)
+async def log_validation_error(request: Request, exc: RequestValidationError):
+    body = (await request.body()).decode("utf-8", "replace")
+    if len(body) > 300:                      # keep an oversized payload from flooding the log
+        body = body[:300] + f"... [{len(body)} chars total]"
+    logger.error("422 on %s | body=%s | errors=%s",
+                 request.url.path, body, [
+                     {"loc": e.get("loc"), "msg": e.get("msg")} for e in exc.errors()
+                 ])
+    return JSONResponse(status_code=422, content={"detail": exc.errors()})
+
+
 # Serve the main HTML file
 # @app.get("/", response_class=FileResponse)
 # async def get_index():
@@ -47,13 +62,13 @@ MAX_TURN = 6
 MAX_SESSION = 500
 
 class ChatRequest(BaseModel):
-    text: str = Field(..., min_lenght=1, max_lenght=500)
-    session_id: str = Field(..., min_length=8, max_length=64)
+    text: str = Field(..., min_length=1, max_length=500)
+    session_id: Optional[str] = Field(default_factory=lambda: str(uuid.uuid4()), max_length=64)
 
 
 _session: Dict[str, Deque[Dict]] = defaultdict(lambda: deque(maxlen=MAX_TURN *2))# *2 because each turn is 2 message
 
-_qroq_client = None
+_groq_client = None
 
 def get_groq_client():
     # Create groq client lazielt, once and reuse it
@@ -62,7 +77,7 @@ def get_groq_client():
         api_key = os.environ.get("GROQ_API_KEY")
         if not api_key:
             logger.warning("GROQ_API_KEY not set in environment variables")
-            raise ValueError("GROQ_API_KEY not set in environment variables")
+            return None
         _groq_client = Groq(api_key=api_key)
     return _groq_client
 
@@ -93,10 +108,17 @@ async def chat_with_bot(payload: ChatRequest):
         logger.warning("GROQ API Key not set in environment variables")
         return {"reply": "Hi! I am the AI bot. Currently, Unable to respond Sorry!"}
 
-    history = _session[payload.session_id]
+    session_id = payload.session_id or str(uuid.uuid4())
+
+    if session_id not in _session and len(_session) >= MAX_SESSION:
+        _session.pop(next(iter(_session)))   # drop the oldest session
+
+    history = _session[session_id]
     #system prompt + remember turn + new question
     message: List[Dict] = (
-        [{"role": "system", "content": SYSTEM_PROMPT}] + list((history) + [{"role": "user", "content": payload.text}])
+        [{"role": "system", "content": SYSTEM_PROMPT}]
+        + list(history)
+        + [{"role": "user", "content": payload.text}]
     )
     try:
         completion = client.chat.completions.create(
@@ -112,11 +134,11 @@ async def chat_with_bot(payload: ChatRequest):
         history.append({"role": "user", "content": payload.text})
         history.append({"role": "assistant", "content": reply})
 
-        logger.info(f"Chat reply generated(session=%s, turn=%d): %s", payload.session_id[:8], len(history)//2)
-        return {"reply": reply}
-    except Exception as e:
-        logger.error(f"Groq API Error: {str(e)}")
-        return {"reply": f"Sorry, I encountered an Problem.Please Try Again"}
+        logger.info("Chat reply generated (session=%s, turn=%d)", session_id[:8], len(history)//2)
+        return {"reply": reply, "session_id": session_id}
+    except Exception:
+        logger.exception("Groq API error")
+        return {"reply": "Sorry, I encountered a problem. Please try again."}
     
 
 
