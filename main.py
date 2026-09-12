@@ -1,4 +1,7 @@
 from fastapi import FastAPI
+from pydantic  import BaseModel, Field
+from collections import deque, defaultdict
+from typing import List, Dict, Any, Deque
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 import os
@@ -40,6 +43,32 @@ async def get_styles():
 async def get_script():
     return "script.js"
 
+MAX_TURN = 6 
+MAX_SESSION = 500
+
+class ChatRequest(BaseModel):
+    text: str = Field(..., min_lenght=1, max_lenght=500)
+    session_id: str = Field(..., min_length=8, max_length=64)
+
+
+_session: Dict[str, Deque[Dict]] = defaultdict(lambda: deque(maxlen=MAX_TURN *2))# *2 because each turn is 2 message
+
+_qroq_client = None
+
+def get_groq_client():
+    # Create groq client lazielt, once and reuse it
+    global _groq_client
+    if _groq_client is None:
+        api_key = os.environ.get("GROQ_API_KEY")
+        if not api_key:
+            logger.warning("GROQ_API_KEY not set in environment variables")
+            raise ValueError("GROQ_API_KEY not set in environment variables")
+        _groq_client = Groq(api_key=api_key)
+    return _groq_client
+
+
+
+
 # System Prompt with your CV data
 SYSTEM_PROMPT = """
 You are an AI assistant for Amit Pal, a Data Scientist and ML Engineer based in Nepal.
@@ -58,39 +87,38 @@ Keep your answers relatively short, conversational, and direct visitors to hire 
 
 # Groq AI Chatbot API
 @app.post("/api/chat")
-async def chat_with_bot(message: dict):
-    user_msg = message.get("text", "").strip()
-    
-    # Validate input
-    if not user_msg:
-        return {"reply": "Please type something to ask me!"}
-    
-    if len(user_msg) > 500:
-        return {"reply": "Your message is too long! Please keep it under 500 characters."}
-    
-    # Needs GROQ API Key to work
-    api_key = os.environ.get("GROQ_API_KEY", "your_groq_api_key_here")
-    
-    if api_key == "your_groq_api_key_here":
-        logger.warning("GROQ_API_KEY not set in environment variables")
-        return {"reply": "Hi! I am the AI bot. Please set your 'GROQ_API_KEY' in the backend environment variables to bring me to life!"}
-         
+async def chat_with_bot(payload: ChatRequest):
+    client = get_groq_client()
+    if client is None:
+        logger.warning("GROQ API Key not set in environment variables")
+        return {"reply": "Hi! I am the AI bot. Currently, Unable to respond Sorry!"}
+
+    history = _session[payload.session_id]
+    #system prompt + remember turn + new question
+    message: List[Dict] = (
+        [{"role": "system", "content": SYSTEM_PROMPT}] + list((history) + [{"role": "user", "content": payload.text}])
+    )
     try:
-        client = Groq(api_key=api_key)
-        chat_completion = client.chat.completions.create(
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": user_msg}
-            ],
+        completion = client.chat.completions.create(
+            messages=message,
             model="openai/gpt-oss-120b",
             temperature=0.7,
             max_tokens=250
         )
-        logger.info("Chat response generated successfully")
-        return {"reply": chat_completion.choices[0].message.content}
+
+        reply = completion.choices[0].message.content
+
+        #only rememmber the exchange if it actually succceeded
+        history.append({"role": "user", "content": payload.text})
+        history.append({"role": "assistant", "content": reply})
+
+        logger.info(f"Chat reply generated(session=%s, turn=%d): %s", payload.session_id[:8], len(history)//2)
+        return {"reply": reply}
     except Exception as e:
         logger.error(f"Groq API Error: {str(e)}")
-        return {"reply": f"Sorry, I encountered an error: {str(e)}"}
+        return {"reply": f"Sorry, I encountered an Problem.Please Try Again"}
+    
+
 
 # Placeholder API for future ML Prediction Demo
 @app.post("/api/predict")

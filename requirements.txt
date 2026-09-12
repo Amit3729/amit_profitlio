@@ -1,8 +1,10 @@
-# Add your Python dependencies here
-# Backend framework and server
 fastapi
-uvicorn
-
-# AI/ML Integrations
+uvicorn[standard]
 groq
 python-dotenv
+pydantic
+joblib
+lightgbm
+scikit-learn
+numpy
+pandas

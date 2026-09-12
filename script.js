@@ -1,4 +1,13 @@
 // Chatbot Toggle Function
+const SESSION_ID = (() => {
+    let id = localStorage.getItem('chat_session_id');
+    if (!id) {
+        id = crypto.randomUUID();
+        localStorage.setItem('chat_session_id', id);
+    }
+    return id;
+})();
+
 function toggleChat() {
     const chatBox = document.getElementById('chat-window');
     chatBox.style.display = chatBox.style.display === 'none' || chatBox.style.display === '' ? 'flex' : 'none';
